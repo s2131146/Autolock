@@ -7,9 +7,6 @@
 
 #include "Arduino.h"
 
-const int kResult_Equals = 0;
-const int kNfc_Uid_Max_Size = 32;
-
 const char* kNfc_Auth_Uid = "3a 2e 7b d4";  // 認証可能なUID
 
 class AMFRC522Extended {

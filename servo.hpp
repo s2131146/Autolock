@@ -27,7 +27,14 @@ public:
      */
     ServoMotor(int pin) {
         pin_ = pin;
-        motor_.attach(pin);
+    }
+
+    /**
+     * @brief アタッチ
+     */
+    void attach() {
+        motor_.attach(pin_);
+        rotate(Rotate::Default);
     }
 
     /**
@@ -36,11 +43,10 @@ public:
      * @param direction 
      */
     void rotate(Rotate direction) {
-        if (!motor_.attached()) return;
         switch (direction) {
-            case Rotate::Default: motor_.write(0);   break;
+            case Rotate::Default:
+            case Rotate::Left:    motor_.write(0);   break;
             case Rotate::Right:   motor_.write(90);  break;
-            case Rotate::Left:    motor_.write(-90); break;
         }
     }
 

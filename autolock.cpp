@@ -36,7 +36,7 @@ enum class SecurityType {
 /**
  * @brief 動作するモード
  */
-SecurityMode SECURITY_MODE = SecurityMode::Both;
+SecurityMode SECURITY_MODE = SecurityMode::FingerprintOnly;
 
 /**
  * @brief 各種ピン番号達
@@ -113,6 +113,7 @@ bool isOpen = false;
  */
 void key() {
     isOpen = !isOpen;
+    servo_.attach();
     servo_.rotate(isOpen ? Rotate::Right : Rotate::Default);
 }
 
@@ -183,9 +184,9 @@ void initFingerprint() {
  * @return true 
  * @return false 
  */
-bool authFingerprint() {
+bool authFingerprint(uint8_t image = FINGERPRINT_OK) {
     bool auth = false;
-    uint8_t image = finger_.getImage();
+    image = image == FINGERPRINT_OK ? finger_.getImage() : image;
     if (image == FINGERPRINT_OK) {
         uint16_t id = getFingerprintId(image);
         if (id != NULL) {
@@ -209,7 +210,6 @@ void setup() {
     mfrc522_.PCD_Init();
     initFingerprint();
     initLed();
-    servo_.attach();
 }
 
 SecurityType authCompleted = SecurityType::null;
@@ -224,10 +224,15 @@ void loop() {
         if (led_green_.current() == LedState::OFF) initLed();
     }
 
-    bool auth;
+    SecurityType type = SecurityType::null;
+    bool canRead = x522_.canReadNfc(&mfrc522_);
+    bool auth = false;
     switch (SECURITY_MODE) {
         case SecurityMode::NfcOnly:
-            if (!x522_.canReadNfc(&mfrc522_)) return;
+            if (!canRead) {
+                if (isOpen && ir_.isDoorClosed()) onDoorClosed();
+                return;
+            };
             auth = x522_.authUid(&mfrc522_.uid);
             break;
         case SecurityMode::FingerprintOnly:
@@ -235,20 +240,31 @@ void loop() {
             break;
         case SecurityMode::Both:
             if (authCompleted == SecurityType::Fingerprint) {
-                if (!x522_.canReadNfc(&mfrc522_)) return;
+                if (!canRead) {
+                    if (isOpen && ir_.isDoorClosed()) onDoorClosed();
+                    return;
+                };
+                type = SecurityType::Nfc;
                 auth = x522_.authUid(&mfrc522_.uid);
                 authCompleted = auth ? SecurityType::null : authCompleted;
             } else if (authCompleted == SecurityType::Nfc) {
-                auth = authFingerprint();
-                authCompleted = auth ? SecurityType::null : authCompleted;
+                uint8_t image = finger_.getImage();
+                if (image == FINGERPRINT_OK) {
+                    type = SecurityType::Fingerprint;
+                    auth = authFingerprint(image);
+                    authCompleted = auth ? SecurityType::null : authCompleted;
+                }
             } else {
-                SecurityType type;
-                if (x522_.canReadNfc(&mfrc522_)) {
+                Serial.println(canRead);
+                if (canRead) {
                     type = SecurityType::Nfc;
                     auth = x522_.authUid(&mfrc522_.uid);
                 } else {
-                    type = SecurityType::Fingerprint;
-                    auth = authFingerprint();
+                    uint8_t image = finger_.getImage();
+                    if (image == FINGERPRINT_OK) {
+                        type = SecurityType::Fingerprint;
+                        auth = authFingerprint(image);
+                    }
                 }
                 if (auth) {
                     if (type == SecurityType::Fingerprint) {
@@ -264,16 +280,19 @@ void loop() {
     }
     
     if (!auth && isOpen && ir_.isDoorClosed()) onDoorClosed();
-    if (!auth && !x522_.canReadNfc(&mfrc522_)) return;
+    if (!auth && !canRead && SECURITY_MODE == SecurityMode::FingerprintOnly) return;
 
     if (SECURITY_MODE == SecurityMode::Both) {
-        if (auth && authCompleted == SecurityType::null) {
-            key();
+        if (!auth && (type == SecurityType::Nfc && canRead || type == SecurityType::Fingerprint)) {
             led(auth);
         }
+        if (auth && authCompleted == SecurityType::null) {
+            led(auth);
+            key();
+        }
     } else {
-        if (auth) key();
         led(auth);        
+        if (auth) key();
     }
 
     delay(INTERVAL_LOOP);

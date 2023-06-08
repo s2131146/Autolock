@@ -33,8 +33,8 @@ public:
      * @brief アタッチ
      */
     void attach() {
+        if (motor_.attached()) return;
         motor_.attach(pin_);
-        rotate(Rotate::Default);
     }
 
     /**
@@ -48,6 +48,8 @@ public:
             case Rotate::Left:    motor_.write(0);   break;
             case Rotate::Right:   motor_.write(90);  break;
         }
+        delay(500);
+        motor_.detach();
     }
 
 private:

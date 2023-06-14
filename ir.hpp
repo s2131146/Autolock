@@ -1,3 +1,6 @@
+/**
+ * @brief 赤外線距離センサー
+ */
 class IR {
 public:
     /**
@@ -5,7 +8,7 @@ public:
      * 
      * @param pin 
      */
-    IR::IR(int pin) {
+    IR(int pin) {
         pin_ = pin;
     }
 

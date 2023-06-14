@@ -9,6 +9,7 @@
 
 #include "Adafruit_Fingerprint.h"
 #include "AMFRC522Extended.hpp"
+#include "switch.hpp"
 #include "servo.hpp"
 #include "led.hpp"
 #include "ir.hpp"
@@ -36,12 +37,13 @@ enum class SecurityType {
 /**
  * @brief 動作するモード
  */
-SecurityMode SECURITY_MODE = SecurityMode::FingerprintOnly;
+SecurityMode SECURITY_MODE = SecurityMode::Both;
 
 /**
  * @brief 各種ピン番号達
  */
 const int PIN_IR_SENSOR = 0;
+const int PIN_SWITCH = 2;
 const int PIN_FINGERPRINT_IN  = 3;
 const int PIN_FINGERPRINT_OUT = 4;
 const int PIN_SERVO = 5;
@@ -82,13 +84,14 @@ const int TIME_LOCK_AFTER_CLOSED = 5000;
 /**
  * @brief 認証有効期限
  */
-const int TIME_RESET_TO_COMPLETED_AUTH = 70;
+const int TIME_RESET_TO_COMPLETED_AUTH = 7000;
 
 SoftwareSerial _serial(PIN_FINGERPRINT_IN, PIN_FINGERPRINT_OUT);
 Adafruit_Fingerprint finger_(&_serial);
 MFRC522 mfrc522_(PIN_MFRC_SS, PIN_MFRC_RST);
 AMFRC522Extended x522_;
 ServoMotor servo_(PIN_SERVO);
+Switch switch_(PIN_SWITCH);
 Led led_blue_(PIN_LED_BLUE);
 Led led_green_(PIN_LED_GREEN);
 Led led_red_(PIN_LED_RED);
@@ -138,8 +141,8 @@ void led(bool auth) {
     if (SECURITY_MODE == SecurityMode::Both && auth) {
         led_blue_.update(LedState::OFF);
     }
-    led_green_.update(auth ? LedState::ON : LedState::OFF);
-    led_red_.update(auth ? LedState::OFF : LedState::ON);
+    led_green_.update(auth);
+    led_red_.update(!auth);
 
     if (!auth) {
         led_red_.flash();
@@ -162,17 +165,16 @@ uint16_t getFingerprintId(uint8_t image) {
     return finger_.fingerID;
 }
 
+Led all_leds_[] = {led_blue_, led_green_, led_red_};
+
 /**
  * @brief 
  * 
  */
 void initFingerprint() {
     bool on = false;
-    Led targets[] = {led_blue_, led_green_, led_red_};
     do {
-        for (auto led : targets) {
-            led.update(on ? LedState::ON : LedState::OFF);
-        }
+        Led::update(all_leds_, on);
         finger_.begin(57600);
         on = !on;
     } while (!finger_.verifyPassword());
@@ -213,21 +215,20 @@ void setup() {
 }
 
 SecurityType authCompleted = SecurityType::null;
-int remainLoopCountForResetAuth = -1;
+unsigned long startAuthTime = 0;
 
 /**
- * @brief Arduino loop
+ * @brief セキュリティ認証
+ * 
+ * @param canRead 
+ * @param type 
+ * @return true 
+ * @return false 
  */
-void loop() {
-    if (--remainLoopCountForResetAuth == 0) {
-        authCompleted = SecurityType::null;
-        if (led_green_.current() == LedState::OFF) initLed();
-    }
-
-    SecurityType type = SecurityType::null;
-    bool canRead = x522_.canReadNfc(&mfrc522_);
+bool authSecurity(bool canRead, SecurityType* type) {
     bool auth = false;
-    switch (SECURITY_MODE) {
+    SecurityMode mode = inChangingMode ? SecurityMode::Both : SECURITY_MODE;
+    switch (mode) {
         case SecurityMode::NfcOnly:
             if (!canRead) {
                 if (isOpen && ir_.isDoorClosed()) onDoorClosed();
@@ -244,40 +245,110 @@ void loop() {
                     if (isOpen && ir_.isDoorClosed()) onDoorClosed();
                     return;
                 };
-                type = SecurityType::Nfc;
+                *type = SecurityType::Nfc;
                 auth = x522_.authUid(&mfrc522_.uid);
                 authCompleted = auth ? SecurityType::null : authCompleted;
             } else if (authCompleted == SecurityType::Nfc) {
                 uint8_t image = finger_.getImage();
                 if (image == FINGERPRINT_OK) {
-                    type = SecurityType::Fingerprint;
+                    *type = SecurityType::Fingerprint;
                     auth = authFingerprint(image);
                     authCompleted = auth ? SecurityType::null : authCompleted;
                 }
             } else {
-                Serial.println(canRead);
                 if (canRead) {
-                    type = SecurityType::Nfc;
+                    *type = SecurityType::Nfc;
                     auth = x522_.authUid(&mfrc522_.uid);
                 } else {
                     uint8_t image = finger_.getImage();
                     if (image == FINGERPRINT_OK) {
-                        type = SecurityType::Fingerprint;
+                        *type = SecurityType::Fingerprint;
                         auth = authFingerprint(image);
                     }
                 }
                 if (auth) {
-                    if (type == SecurityType::Fingerprint) {
-                        remainLoopCountForResetAuth = TIME_RESET_TO_COMPLETED_AUTH * 7;
-                    } else {
-                        remainLoopCountForResetAuth = TIME_RESET_TO_COMPLETED_AUTH;
-                    }
-                    authCompleted = type;
+                    startAuthTime = millis();
+                    authCompleted = *type;
                     led_blue_.update(LedState::ON);
                 }
             }
             break;
     }
+
+    return auth;
+}
+
+/**
+ * @brief 認証方法を変更
+ */
+void changeSecurityMode() {
+    SecurityMode _new;
+    switch (SECURITY_MODE) {
+        case SecurityMode::NfcOnly: _new = SecurityMode::FingerprintOnly; break;
+        case SecurityMode::FingerprintOnly: _new = SecurityMode::Both; break;
+        case SecurityMode::Both: _new = SecurityMode::NfcOnly; break;
+    }
+    SECURITY_MODE = _new;
+}
+
+/**
+ * @brief 認証開始からの経過時間
+ * 
+ * @return unsigned long 
+ */
+unsigned long elapsedAuthTime() {
+    return millis() - startAuthTime;
+}
+
+void flashOnChangedSecyrityMode() {
+    Led leds[] = {led_green_, led_blue_};
+    Led::flash(leds);
+    Led::update(leds, LedState::ON);
+    delay(3000);
+    Led::update(leds, LedState::OFF);
+}
+
+/**
+ * @brief ボタン押下で解錠
+ */
+void keyIfButtonPressed() {
+    if (switch_.shortPressed()) {
+        led(true);
+        key();
+    }
+}
+
+/**
+ * @brief 認証方法変更待機状態
+ */
+bool inChangingMode = false;
+
+/**
+ * @brief Arduino loop
+ */
+void loop() {
+    if (elapsedAuthTime() >= TIME_RESET_TO_COMPLETED_AUTH) {
+        startAuthTime = 0;
+        authCompleted = SecurityType::null;
+        if (led_green_.current() == LedState::OFF) initLed();
+    }
+    if (switch_.longPressed()) {
+        inChangingMode = true;
+        Led leds[] = {led_green_, led_red_};
+        Led::flash(leds);
+        
+        led_green_.update(LedState::ON);
+        led_red_.update(LedState::OFF);
+        startAuthTime = millis();
+    }
+    if (inChangingMode) {
+        led_green_.invert();
+        led_red_.invert();
+    }
+
+    SecurityType type = SecurityType::null;
+    bool canRead = x522_.canReadNfc(&mfrc522_);
+    bool auth = authSecurity(canRead, &type);
     
     if (!auth && isOpen && ir_.isDoorClosed()) onDoorClosed();
     if (!auth && !canRead && SECURITY_MODE == SecurityMode::FingerprintOnly) return;
@@ -287,8 +358,15 @@ void loop() {
             led(auth);
         }
         if (auth && authCompleted == SecurityType::null) {
-            led(auth);
-            key();
+            startAuthTime = 0;
+            if (inChangingMode) {
+                changeSecurityMode();
+                flashOnChangedSecyrityMode();
+                inChangingMode = false;
+            } else {
+                led(auth);
+                key();
+            }
         }
     } else {
         led(auth);        

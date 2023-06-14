@@ -1,3 +1,10 @@
+#ifndef AUTOLOCK_LED_H_
+#define AUTOLOCK_LED_H_
+
+#include "array.hpp"
+
+#endif
+
 /**
  * @brief LEDの状態
  */
@@ -32,18 +39,65 @@ public:
             case LedState::ON:  digitalWrite(pin_, HIGH); break;
             case LedState::OFF: digitalWrite(pin_, LOW);  break;
         }
-        currentState = newState;
+        current_state_ = newState;
+    }
+
+    /**
+     * @brief LEDの状態を更新
+     * 
+     * @param on LEDをON
+     */
+    void update(bool on) {
+        update(on ? LedState::ON : LedState::OFF);
+    }
+
+    /**
+     * @brief LEDの状態を更新
+     * 
+     * @param leds 
+     * @param state 
+     */
+    void update(Led leds[], LedState state) {
+        for (int i = 0; i < array_size(leds); ++i) {
+            leds[i].update(state);
+        }
+    }
+
+    /**
+     * @brief LEDの状態を更新
+     * 
+     * @param leds 
+     * @param on
+     */
+    void update(Led leds[], bool on) {
+        update(leds, on ? LedState::ON : LedState::OFF);
     }
 
     /**
      * @brief LEDを点滅させる
      */
     void flash() {
-        LedState backup = currentState;
+        LedState backup = current_state_;
         for (int i = 0; i < FLASH_COUNT; i++) {
             update(LedState::ON);
             delay(INTERVAL_FLASH_ON);
             update(LedState::OFF);
+            delay(INTERVAL_FLASH_OFF);
+        }
+        update(backup);
+    }
+
+   /**
+    * @brief LEDを点滅させる
+    * 
+    * @param leds 
+    */
+    void flash(Led leds[]) {
+        LedState backup = current_state_;
+        for (int i = 0; i < FLASH_COUNT; i++) {
+            update(leds, LedState::ON);
+            delay(INTERVAL_FLASH_ON);
+            update(leds, LedState::OFF);
             delay(INTERVAL_FLASH_OFF);
         }
         update(backup);
@@ -55,7 +109,15 @@ public:
      * @return LedState 
      */
     LedState current() {
-        return currentState;
+        return current_state_;
+    }
+
+    /**
+     * @brief 反転
+     */
+    void invert() {
+        LedState newState = current_state_ == LedState::ON ? LedState::OFF : LedState::ON;
+        update(newState);
     }
 
 private:
@@ -78,5 +140,5 @@ private:
     /**
      * @brief 現在の状態
      */
-    LedState currentState;
+    LedState current_state_;
 };

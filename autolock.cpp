@@ -117,7 +117,7 @@ bool isOpen = false;
 void key() {
     isOpen = !isOpen;
     servo_.attach();
-    servo_.rotate(isOpen ? Rotate::Right : Rotate::Default);
+    servo_.rotate(isOpen ? Rotate::Left : Rotate::Default);
 }
 
 /**
@@ -174,7 +174,7 @@ Led all_leds_[] = {led_blue_, led_green_, led_red_};
 void initFingerprint() {
     bool on = false;
     do {
-        Led::update(all_leds_, on);
+        led_blue_.update(all_leds_, on);
         finger_.begin(57600);
         on = !on;
     } while (!finger_.verifyPassword());
@@ -216,6 +216,11 @@ void setup() {
 
 SecurityType authCompleted = SecurityType::null;
 unsigned long startAuthTime = 0;
+
+/**
+ * @brief 認証方法変更待機状態
+ */
+bool inChangingMode = false;
 
 /**
  * @brief セキュリティ認証
@@ -302,10 +307,10 @@ unsigned long elapsedAuthTime() {
 
 void flashOnChangedSecyrityMode() {
     Led leds[] = {led_green_, led_blue_};
-    Led::flash(leds);
-    Led::update(leds, LedState::ON);
+    led_blue_.flash(leds);
+    led_blue_.update(leds, LedState::ON);
     delay(3000);
-    Led::update(leds, LedState::OFF);
+    led_blue_.update(leds, LedState::OFF);
 }
 
 /**
@@ -319,11 +324,6 @@ void keyIfButtonPressed() {
 }
 
 /**
- * @brief 認証方法変更待機状態
- */
-bool inChangingMode = false;
-
-/**
  * @brief Arduino loop
  */
 void loop() {
@@ -335,7 +335,7 @@ void loop() {
     if (switch_.longPressed()) {
         inChangingMode = true;
         Led leds[] = {led_green_, led_red_};
-        Led::flash(leds);
+        led_blue_.flash(leds);
         
         led_green_.update(LedState::ON);
         led_red_.update(LedState::OFF);

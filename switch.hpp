@@ -62,7 +62,7 @@ private:
     /**
      * @brief 長押し判定のしきい値
      */
-    const int LONG_PRESS_THRESHOLD = 5000;
+    const int LONG_PRESS_THRESHOLD = 4000;
     
     /**
      * @brief 押下判定のしきい値

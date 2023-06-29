@@ -45,8 +45,8 @@ public:
     void rotate(Rotate direction) {
         switch (direction) {
             case Rotate::Default:
-            case Rotate::Right:  motor_.write(90); break;
-            case Rotate::Left:   motor_.write(0);  break;
+            case Rotate::Left:  motor_.write(90); break;
+            case Rotate::Right:   motor_.write(0);  break;
         }
         delay(500);
         motor_.detach();

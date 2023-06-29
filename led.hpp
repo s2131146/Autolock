@@ -1,10 +1,3 @@
-#ifndef AUTOLOCK_LED_H_
-#define AUTOLOCK_LED_H_
-
-#include "array.hpp"
-
-#endif
-
 /**
  * @brief LEDの状態
  */
@@ -26,7 +19,6 @@ public:
     Led(int pin) {
         pin_ = pin;
         pinMode(pin, OUTPUT);
-        Serial.println(pin);
     }
 
     /**
@@ -55,10 +47,11 @@ public:
      * @brief LEDの状態を更新
      * 
      * @param leds 
+     * @param size 
      * @param state 
      */
-    void update(Led leds[], LedState state) {
-        for (int i = 0; i < array_size(leds); ++i) {
+    static void update(Led leds[], uint8_t size, LedState state) {
+        for (int i = 0; i < size; ++i) {
             leds[i].update(state);
         }
     }
@@ -67,10 +60,11 @@ public:
      * @brief LEDの状態を更新
      * 
      * @param leds 
-     * @param on
+     * @param size 
+     * @param on 
      */
-    void update(Led leds[], bool on) {
-        update(leds, on ? LedState::ON : LedState::OFF);
+    static void update(Led leds[], uint8_t size, bool on) {
+        update(leds, size, on ? LedState::ON : LedState::OFF);
     }
 
     /**
@@ -87,20 +81,26 @@ public:
         update(backup);
     }
 
-   /**
-    * @brief LEDを点滅させる
-    * 
-    * @param leds 
-    */
-    void flash(Led leds[]) {
-        LedState backup = current_state_;
+    /**
+     * @brief LEDを点滅させる
+     * 
+     * @param leds 
+     * @param size 
+     */
+    static void flash(Led leds[], size_t size) {
+        LedState backup[size];
+        for (int i = 0; i < size; i++) {
+            backup[i] = leds[i].current();
+        }
         for (int i = 0; i < FLASH_COUNT; i++) {
-            update(leds, LedState::ON);
+            update(leds, size, LedState::ON);
             delay(INTERVAL_FLASH_ON);
-            update(leds, LedState::OFF);
+            update(leds, size, LedState::OFF);
             delay(INTERVAL_FLASH_OFF);
         }
-        update(backup);
+        for (int i = 0; i < size; i++) {
+            leds[i].update(backup[i]);
+        }
     }
 
     /**
@@ -124,13 +124,13 @@ private:
     /**
      * @brief フラッシュ時の間隔
      */
-    const int INTERVAL_FLASH_ON  = 500;
-    const int INTERVAL_FLASH_OFF = 100;
+    static const int INTERVAL_FLASH_ON  = 500;
+    static const int INTERVAL_FLASH_OFF = 100;
 
     /**
      * @brief フラッシュする回数
      */
-    const int FLASH_COUNT = 4;
+    static const int FLASH_COUNT = 4;
 
     /**
      * @brief LEDピン番号

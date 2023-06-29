@@ -7,7 +7,7 @@
 
 #include "Arduino.h"
 
-const char* kNfc_Auth_Uid = "3a 2e 7b d4";  // 認証可能なUID
+const char* kNfc_Auth_Uid = "60 68 1e 1e";  // 認証可能なUID
 
 class AMFRC522Extended {
 public:
